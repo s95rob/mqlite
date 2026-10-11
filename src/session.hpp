@@ -116,6 +116,7 @@ namespace mq {
             } break;
 
             case message_type::DISCONNECT: {
+                channels_.unsubscribe(self);
                 socket_.shutdown(tcp::socket::shutdown_send);
                 socket_.close();
 
