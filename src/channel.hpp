@@ -1,37 +1,69 @@
 #pragma once
 
 #include <algorithm>
-#include <memory>
-#include <set>
 #include <string>
 #include <unordered_map>
+#include <deque>
+
+#include "common.hpp"
 
 namespace mq {
 
     class session;
 
+    class channel {
+    public:
+        void subscribe(std::weak_ptr<session> subscriber) {
+            subscribers_.emplace(subscriber);
+        }
+
+        void unsubscribe(std::weak_ptr<session> subscriber) {
+            if (subscribers_.contains(subscriber)) {
+                subscribers_.erase(subscriber);
+            }
+        }
+
+        bool has_subscriber(std::weak_ptr<session> subscriber) const {
+            return subscribers_.contains(subscriber);
+        }
+
+        void cache_message(const std::string& message) {
+            if (message_cache_.size() >= MESSAGE_CACHE_SIZE_MAX) {
+                message_cache_.pop_front();
+            }
+
+            message_cache_.push_back(message);
+        }
+
+        const auto& get_subscribers() const { return subscribers_; }
+        const auto& get_cache() const { return message_cache_; }
+        
+    private:
+        static constexpr size_t MESSAGE_CACHE_SIZE_MAX = 100;
+        weak_ptr_set<session> subscribers_;
+        std::deque<std::string> message_cache_;
+    };
+
     class channel_manager {
     public:
-        void subscribe(const std::string& channel, std::weak_ptr<session> subscriber) {
-            if (has_channel(channel)) {
-                channels_.at(channel).emplace(subscriber);
+        void subscribe(const std::string& channel_name, std::weak_ptr<session> subscriber) {
+            if (has_channel(channel_name)) {
+                channels_.at(channel_name).subscribe(subscriber);
             }
         }
 
         void unsubscribe(std::weak_ptr<session> subscriber) {
-            for (auto& [ channel_name, subscribers ] : channels_) {
-                if (subscribers.contains(subscriber)) {
-                    subscribers.erase(subscriber);
-                }
+            for (auto& [ channel_name, channel ] : channels_) {
+                channel.unsubscribe(subscriber);
             }
         }
 
-        auto& get_subscribers(const std::string& channel) {
-            return channels_.at(channel);
+        auto& get_channel(const std::string& channel_name) {
+            return channels_.at(channel_name);
         }
 
-        bool has_channel(const std::string& channel) {
-            auto it = channels_.find(channel);
+        bool has_channel(const std::string& channel_name) {
+            auto it = channels_.find(channel_name);
             if (it == channels_.end()) {
                 return false;
             }
@@ -44,12 +76,10 @@ namespace mq {
         const auto begin() const { return channels_.begin(); }
         const auto end() const { return channels_.end(); }
 
-    private:
-        template <typename T>
-        using weak_set = std::set<std::weak_ptr<T>, std::owner_less<std::weak_ptr<T>>>;
+        channel& operator[](const std::string& channel_name) { return channels_[channel_name]; }
 
-        // Channel name -> Subscribed sessions
-        std::unordered_map<std::string, weak_set<session>> channels_;
+    private:
+        std::unordered_map<std::string, channel> channels_;
     };
 
 }

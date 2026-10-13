@@ -1,6 +1,5 @@
 #include <iostream>
 
-
 #include <asio.hpp>
 
 #include "protocol.hpp"

@@ -112,6 +112,12 @@ namespace mq {
 
                 if (!channel_name.empty()) {
                     channels_.subscribe(channel_name, self);
+
+                    // Replay "backlogged" messages to the new subscriber
+                    channel& channel = channels_[channel_name];
+                    for (const auto& logged_msg : channel.get_cache()) {
+                        co_await write("[BACKLOG] " + logged_msg);
+                    }
                 }
             } break;
 
@@ -129,16 +135,17 @@ namespace mq {
 
                 // Broadcast the message to all subscribed sessions, skip itself
                 std::string channel_name = message.substr(0, separator_pos);
+                std::string payload = message.substr(separator_pos + 1);
 
-                if (channels_.has_channel(channel_name)) {
-                    for (auto& session : channels_.get_subscribers(channel_name)) {
-                        auto locked_session = session.lock();
-                        if (!locked_session || locked_session == self) {
-                            continue;
-                        }
+                // TODO: Lazy loading channels could be an attack vector later...
+                channel& target_channel = channels_[channel_name]; 
+                target_channel.cache_message(payload);
 
-                        co_await locked_session->write(message.substr(separator_pos + 1));
-                    }
+                for (auto& session_weak : target_channel.get_subscribers()) {
+                    auto session_strong = session_weak.lock();
+                    if (!session_strong || session_strong == self) continue;
+
+                    co_await session_strong->write(payload);
                 }
             } break;
             
