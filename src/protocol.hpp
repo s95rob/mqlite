@@ -24,7 +24,7 @@ namespace mq {
         "SUBSCRIBE"
     };
 
-    std::pair<message_type, std::string> decode_message(const std::string& data) {
+    inline std::pair<message_type, std::string> decode_message(const std::string& data) {
         size_t num_types = static_cast<size_t>(message_type::COUNT);
         for (size_t i = 1; i < num_types; i++) {
             size_t prefix_len = std::strlen(MESSAGE_PREFIXES[i]);
